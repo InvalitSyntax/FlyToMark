@@ -3,6 +3,7 @@
 [код](subscriber_aruco_detect.py)
 
 `from aruco_pose.msg import MarkerArray` - тип ROS сообшения, приходящего из топика
+> Тип сообщения у нас был `Type: aruco_pose/MarkerArray` -> сл-но из сообщений от `aruco_pose` мы берём `MarkerArray` - для понимания как устроены сообщения
 
 В функцию-обработчик `markersCallback` приходит сообщение `msg`
 
