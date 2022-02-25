@@ -20,9 +20,10 @@
 
 То что выше оказалось не нужным, но на будущее пригодится
 > [Пример подписчика на `aruco_detect/markers` из справки](https://clover.coex.tech/ru/aruco_marker.html#работа-с-результатом-распознавания-из-python)
+![напраление_маркеров_топик](https://user-images.githubusercontent.com/81087114/155739375-4bdb6d13-7490-4426-bd81-6d7960298edb.png)
 
 ### Код Subscriber'a
-[Объяснение чуть доделаного кода](subscriber.md)![напраление_маркеров_топик](https://user-images.githubusercontent.com/81087114/155738495-46012754-0db8-4ff2-8e32-4e937e336870.png)
+[Объяснение чуть доделаного кода](subscriber.md)
 
 
 
