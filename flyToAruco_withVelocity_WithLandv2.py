@@ -85,6 +85,16 @@ def logicOfFlight():
         yStart = telemetry.y
 
         while followAruco() == 'lost':
+
+            # land
+            if rospy.wait_for_message('rangefinder/range', Range).range < 0.3:
+                set_velocity(vx=lastPoseOfAruco[0], vy=lastPoseOfAruco[1], vz=-10, frame_id='body')
+                while rospy.wait_for_message('rangefinder/range', Range).range > 0.15:
+                    pass
+                return
+
+
+
             telemetry = get_telemetry(frame_id='aruco_map')
             if 0 < telemetry.x < 4.2 and 0 < telemetry.y < 4.2 and telemetry.z < 1 and abs(telemetry.x - xStart) < 1 and abs(telemetry.y - yStart) < 1:
                 set_velocity(vx=lastPoseOfAruco[0] / 4, vy=lastPoseOfAruco[1] / 4, vz=0.2, yaw=float('nan'), frame_id='body')
@@ -93,12 +103,8 @@ def logicOfFlight():
                 # поиск метки во всём поле
                 set_position(x=telemetry.x, y=telemetry.y, z=telemetry.z, yaw=float('nan'), frame_id='aruco_map')
 
-        if rospy.wait_for_message('rangefinder/range', Range).range < 0.5:
-            while rospy.wait_for_message('rangefinder/range', Range).range > 0.15:
-                pass
-            set_velocity(vx=0, vy=0, vz=-5, frame_id='body')
-            return
 
 logicOfFlight()
-rospy.sleep(1)
 arming(False)
+
+rospy.sleep()
