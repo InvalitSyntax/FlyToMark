@@ -32,7 +32,7 @@ def land_wait():
     while get_telemetry().armed:
         rospy.sleep(0.2)
 
-P = 0.6
+
 zFlight = 1
 lastPoseOfAruco = [0, 0]
 
@@ -48,7 +48,7 @@ def followAruco(ID=10, VZ=-0.3):
     # fix floating height
     telemetry = get_telemetry(frame_id='aruco_map')
 
-    
+    P = 0.9 if telemetry.y < 0.6 else 0.6
     zVelocity = zFlight - telemetry.z
 
 
@@ -62,9 +62,14 @@ def followAruco(ID=10, VZ=-0.3):
         lastPoseOfAruco[:] = [poseAruco.y + 0.07, poseAruco.x]
 
         # +0.07 - поправка на камеру (она не в центре дрона - на 7 сантиметра дальше по y)
+        ## УБРАТЬ МИНУСЫ ПРИ ПОЛЁТЕ НА САМОМ ДРОНЕ!
+
         xVelocity = ((poseAruco.y + 0.07) * P)
         yVelocity = (poseAruco.x * P)
-        if poseAruco.y < 0.15 and poseAruco.x < 0.15:
+
+        ## УБРАТЬ МИНУСЫ ПРИ ПОЛЁТЕ НА САМОМ ДРОНЕ!
+        
+        if abs(poseAruco.y) < 0.15 and abs(poseAruco.x) < 0.15:
             set_velocity(vx=xVelocity, vy=yVelocity, vz=VZ, frame_id='body')
         else:
             set_velocity(vx=xVelocity, vy=yVelocity, vz=0, frame_id='body')
@@ -89,22 +94,27 @@ def logicOfFlight():
             # land
             if rospy.wait_for_message('rangefinder/range', Range).range < 0.3:
                 set_velocity(vx=lastPoseOfAruco[0], vy=lastPoseOfAruco[1], vz=-10, frame_id='body')
-                while rospy.wait_for_message('rangefinder/range', Range).range > 0.15:
+                while rospy.wait_for_message('rangefinder/range', Range).range > 0.04:
                     pass
                 return
 
 
 
             telemetry = get_telemetry(frame_id='aruco_map')
-            if 0 < telemetry.x < 4.2 and 0 < telemetry.y < 4.2 and telemetry.z < 1 and abs(telemetry.x - xStart) < 1 and abs(telemetry.y - yStart) < 1:
+            if 0 < telemetry.x < 4.2 and 0 < telemetry.y < 4.2 and telemetry.z < 1.3 and abs(telemetry.x - xStart) < 1 and abs(telemetry.y - yStart) < 1:
                 set_velocity(vx=lastPoseOfAruco[0] / 4, vy=lastPoseOfAruco[1] / 4, vz=0.2, yaw=float('nan'), frame_id='body')
 
             else:
                 # поиск метки во всём поле
                 set_position(x=telemetry.x, y=telemetry.y, z=telemetry.z, yaw=float('nan'), frame_id='aruco_map')
 
+        
+        if rospy.wait_for_message('rangefinder/range', Range).range < 0.04:
+            return
+
 
 logicOfFlight()
 arming(False)
+print('end.')
 
-rospy.sleep()
+rospy.sleep(1)
