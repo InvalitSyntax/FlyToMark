@@ -34,11 +34,11 @@ def land_wait():
 
 zFlight = 1
 lastPoseOfAruco = [0, 0]
-ID = 90
+ID = 10
 VZ = -0.3
 
 navigate_wait(z=1, frame_id='body', yaw=float('nan'), auto_arm=True)
-navigate_wait(x=1, y=1, z=zFlight, yaw=math.pi / 2, frame_id='aruco_map')
+navigate_wait(x=2, y=2, z=zFlight, yaw=math.pi / 2, frame_id='aruco_map')
 
 
 def logicOfFlight():
@@ -61,20 +61,21 @@ def logicOfFlight():
             dataAruco = dataAruco[0]
             poseAruco = dataAruco.pose.position
 
-            print(f'x: {poseAruco.x}')
-            print(f'y: {poseAruco.y}')
+            #print()
+            #print(f'x: {poseAruco.x}')
+            #print(f'y: {poseAruco.y}')
             lastPoseOfAruco[:] = [(poseAruco.y + 0.07), (poseAruco.x)]
 
             # +0.07 - поправка на камеру (она не в центре дрона - на 7 сантиметра дальше по y)
-            if telemetry.z < 1 or (abs(poseAruco.y) < 1 and abs(poseAruco.x) < 1):
-                P = 1
+            if telemetry.z < 1 and (abs(poseAruco.y) < 1 and abs(poseAruco.x) < 1):
+                P = 1.2
             else:
-                P = 0.6
+                P = 0.9
             print(f'P = {P}')
             xVelocity = ((poseAruco.y + 0.07) * P)
             yVelocity = (poseAruco.x * P)
 
-            if abs(poseAruco.y) < 0.15 and abs(poseAruco.x) < 0.15:
+            if abs(poseAruco.y) < 0.2 and abs(poseAruco.x) < 0.2:
                 set_velocity(vx=xVelocity, vy=yVelocity, vz=VZ, frame_id='body')
 
             else:
@@ -89,7 +90,7 @@ def logicOfFlight():
 
             # land
             if rospy.wait_for_message('rangefinder/range', Range).range < 0.3:
-                set_velocity(vx=lastPoseOfAruco[0], vy=lastPoseOfAruco[1], vz=-10, frame_id='body')
+                set_velocity(vx=lastPoseOfAruco[0] * P, vy=lastPoseOfAruco[1] * P, vz=-10, frame_id='body')
                 while rospy.wait_for_message('rangefinder/range', Range).range > 0.1:
                     pass
                 return
