@@ -57,7 +57,7 @@ class FindDist:
         self.dataAruco = None
         self.msg = None
         self.poseOfArucoInBody = None # .x and .y
-        self.ID = 90
+        self.ID = 35
         self.dist = float('nan')
         self.frame_id = 'body'
         self.image_pub = rospy.Publisher('/debug', Image, queue_size=1)
@@ -65,7 +65,7 @@ class FindDist:
         self.tf_buffer = tf2_ros.Buffer()
         self.transform_timeout = rospy.Duration(0.01)  # таймаут ожидания трансформации
         self.pose = PoseStamped()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, queue_size=1, buff_size=1)
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, queue_size=1)
 
     def range_callback(self, msg):
         self.range = msg.range
@@ -77,7 +77,7 @@ class FindDist:
         self.markers = msg.markers
         self.msg = msg
         s = self.transform()
-        s = self.calculate_dist_and_pub()
+        #s = self.calculate_dist_and_pub()
     
     def calculate_dist_and_pub(self):
         if self.img is not None and self.markers is not None:
@@ -134,58 +134,43 @@ class FindDist:
 
 
 for_dist = FindDist()
-rospy.Subscriber('main_camera/image_raw', Image, for_dist.image_callback, queue_size=1)
+#rospy.Subscriber('main_camera/image_raw', Image, for_dist.image_callback, queue_size=1)
 rospy.Subscriber('aruco_detect/markers', MarkerArray, for_dist.markers_callback, queue_size=1)
 rospy.Subscriber('rangefinder/range', Range, for_dist.range_callback, queue_size=1)
 
 navigate_wait(z=1, frame_id='body', yaw=float('nan'), auto_arm=True)
-navigate_wait(x=0, y=0, z=0.5, yaw=math.pi / 2, frame_id='aruco_map')
+navigate_wait(x=3.2, y=1.2, z=0.5, yaw=math.pi / 2, frame_id='aruco_map')
 
 zFlight = 1
 lastPoseOfAruco = [0, 0]
 ID = 35
-VZ = 0
+VZ = -0.3
 
 def logicOfFlight(datas):
     lastPoseOfAruco = [0, 0]
-    P = 0.9
+    P = 1.5
 
     while not rospy.is_shutdown():
         start = time.time()
         #telemetry = get_telemetry(frame_id='aruco_map')
         rangefinder_range = datas.range
 
-        poseAruco = datas.poseOfArucoInBody # here .x and .y in that (.pose.position of object)
+        poseAruco = datas.poseOfArucoInBody # here .x and .y (.pose.position of object)
 
         # if find mark:
         if poseAruco != None:
-            maxDistSnizeniya = 0.2
+            maxDistSnizeniya = 0.1
             distX = (poseAruco.x)
             distY = (poseAruco.y)
 
+            '''
             # когда дрон в кубе 2х2 возле метки увеличиваем P:
-            if abs(distX) < 0.1 and abs(distY) < 0.1:
-                P = 0.6
-            elif abs(distX) < 0.6 and abs(distY) < 0.6:
-
-                # если скорости не хватает что бы достаточно сблизится, постепенно увеличиваем:
-                if abs(distX) > maxDistSnizeniya and abs(distY) > maxDistSnizeniya:
-                    P += 0.1
-                else:
-                    # когда уже снижаемся, но всё же постепенно отстаём, тоже наращиваем скорость
-                    dx = lastPoseOfAruco[0] - distX
-                    dy = lastPoseOfAruco[1] - distY
-                    if (dx < 0 or dy < 0) and (abs(distX) > 0.06 or abs(distY) > 0.06):
-                        P += 0.1
-
-                    # елси же отставание минимальное, уменьшаем скорость
-                    else:
-                        P = 1.2
+            if abs(distX) < 0.05 and abs(distY) < 0.05:
+                P = 0.8
             else:
-                P = 0.9
-
-            if P > 1.5:
-                P = 1.5
+                P = 2
+            '''
+            
 
             print(f'P = {P} {distX} {distY}')
             xVelocity = (distX * P)
@@ -203,7 +188,7 @@ def logicOfFlight(datas):
             print('nan')
 
             # land
-            if rangefinder_range < 0.3:
+            if rangefinder_range < 0.3 and abs(lastPoseOfAruco[0]) < 0.1 and abs(lastPoseOfAruco[1]) < 0.1:
                 set_velocity(vx=lastPoseOfAruco[0] * P, vy=lastPoseOfAruco[1] * P, vz=-10, frame_id='body')
                 while rospy.wait_for_message('rangefinder/range', Range).range > 0.1:
                     pass
@@ -217,7 +202,7 @@ def logicOfFlight(datas):
                 # поиск метки во всём поле
                 set_position(x=float('nan'), y=float('nan'), z=1.8, yaw=math.pi / 2, frame_id='aruco_map')
 
-            P = 0.9
+            #P = 0.9
 
         if rangefinder_range <= 0.1:
             return
