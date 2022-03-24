@@ -157,10 +157,6 @@ sub3 = rospy.Subscriber('rangefinder/range', Range, for_dist.range_callback, que
 navigate_wait(z=1, frame_id='body', yaw=float('nan'), auto_arm=True)
 navigate_wait(x=3.2, y=1.2, z=1, yaw=math.pi / 2, frame_id='aruco_map')
 
-zFlight = 1
-lastPoseOfAruco = [0, 0]
-ID = 35
-VZ = -0.3
 
 def logicOfFlight(datas):
     lastPoseOfAruco = [0, 0]
@@ -169,6 +165,8 @@ def logicOfFlight(datas):
     dt = 0
     maxDistSnizeniya = 0.03
     minDistNivigate = 0.6
+    lastPoseOfAruco = [0, 0]
+    VZ = -0.3
 
     while not rospy.is_shutdown():
         start = time.time()
