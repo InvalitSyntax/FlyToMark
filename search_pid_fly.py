@@ -6,6 +6,7 @@ from std_srvs.srv import Trigger
 import math
 from sensor_msgs.msg import Range
 from std_msgs.msg import Float64
+from clover.srv import SetLEDEffect
 
 import time
 import threading
@@ -40,6 +41,7 @@ set_rates = rospy.ServiceProxy('set_rates', srv.SetRates)
 arming = rospy.ServiceProxy('mavros/cmd/arming', CommandBool)
 land = rospy.ServiceProxy('land', Trigger)
 send_command_long = rospy.ServiceProxy('/mavros/cmd/command', CommandLong)
+set_effect = rospy.ServiceProxy('led/set_effect', SetLEDEffect) 
 
 def reboot_fcu():
     send_command_long(False, mavlink.MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN, 0, 1, 0, 0, 0, 0, 0, 0)
@@ -89,7 +91,7 @@ class FindDist:
         self.dataAruco = None
         self.msg = None
         self.poseOfArucoInBody = None # .x and .y
-        self.ID = 90
+        self.ID = 201
         self.dist = float('nan')
         self.frame_id = 'body'
         self.image_pub = rospy.Publisher('/debug', Image, queue_size=1)
@@ -97,6 +99,7 @@ class FindDist:
         self.transform_timeout = rospy.Duration(0.01)  # таймаут ожидания трансформации
         self.pose = PoseStamped()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, queue_size=1)
+        self.STOP = False
 
     def range_callback(self, msg):
         self.range = msg.range
@@ -145,17 +148,26 @@ class FindDist:
             else:
                 self.poseOfArucoInBody = None
 
+    def led(self):
+        while not self.STOP:
+            if self.poseOfArucoInBody is not None:
+                set_effect(effect='flash', r=0, g=0, b=255)
+            rospy.sleep(1)
+
 reboot_fcu()
 rospy.sleep(15)
 print('rebooted')
 
 for_dist = FindDist()
+print(*for_dist.__dict__.items())
+thread = threading.Thread(target=for_dist.led)
+thread.start()
 sub1 = rospy.Subscriber('main_camera/image_raw', Image, for_dist.image_callback, queue_size=1)
 sub2 = rospy.Subscriber('aruco_detect/markers', MarkerArray, for_dist.markers_callback, queue_size=1)
 sub3 = rospy.Subscriber('rangefinder/range', Range, for_dist.range_callback, queue_size=1)
 
 navigate_wait(z=1, frame_id='body', yaw=float('nan'), auto_arm=True)
-navigate_wait(x=3.2, y=1.2, z=1, yaw=math.pi / 2, frame_id='aruco_map')
+navigate_wait(x=1, y=1.2, z=1, yaw=math.pi / 2, frame_id='aruco_map')
 
 
 def logicOfFlight(datas):
@@ -175,6 +187,8 @@ def logicOfFlight(datas):
 
         # if find mark:
         if poseAruco != None:
+            # find, blue idicate
+            
             distX = (poseAruco.x)
             distY = (poseAruco.y)
 
@@ -235,7 +249,7 @@ def logicOfFlight(datas):
                 navigate(x=3.2, y=1.2, z=1.1, yaw=math.pi / 2, frame_id='aruco_map')
 
 def findInZone():
-    pointsForFligtToFind = [90, 70, 72, 92]
+    pointsForFligtToFind = [85, 120, 131, 87, 94]
     while not rospy.is_shutdown():
         for point in pointsForFligtToFind:
             navigate(x=0, y=0, z=1.1, yaw=math.pi / 2, frame_id=f'aruco_{point}')
@@ -244,6 +258,8 @@ def findInZone():
                 if for_dist.poseOfArucoInBody is not None:
                     res = logicOfFlight(for_dist)
                     if res == 'success':
+                        # landed, red indicate
+                        set_effect(r=255, g=0, b=0)
                         return
                     else:
                         navigate(x=0, y=0, z=1.1, yaw=math.pi / 2, frame_id=f'aruco_{point}')
@@ -256,6 +272,8 @@ findInZone()
 print(f'range: {for_dist.range}')
 
 rospy.sleep(1)
+for_dist.STOP = True
+thread.join()
 sub1.unregister()
 sub2.unregister()
 sub3.unregister()
