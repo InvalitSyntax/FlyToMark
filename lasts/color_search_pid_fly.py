@@ -93,81 +93,100 @@ class FindDist:
 
         self.image_pub_debug = rospy.Publisher('~debug', Image, queue_size=1)
         self.image_pub_HSV = rospy.Publisher('HSV', Image, queue_size=1)
-
         self.range = None
-        self.mDist = None
+        self.frame = None
 
         self.frame_id = 'body'
         self.tf_buffer = tf2_ros.Buffer()
         self.transform_timeout = rospy.Duration(0.01)  # таймаут ожидания трансформации
         self.pose = PoseStamped()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, queue_size=1)
-        self.poseOfArucoInBody = None
+        self.mDist = None
 
+        self.poseOfArucoInBody = None
+        self.areaInP = None
+        self.minD = 0.02
+
+        self.STOP = False
 
     def range_callback(self, msg):
         self.range = msg.range
 
     def image_callback(self, msg):
-        frame = bridge.imgmsg_to_cv2(msg, 'bgr8')
+        self.frame = bridge.imgmsg_to_cv2(msg, 'bgr8')
         #self.image_pub_debug.publish(bridge.cv2_to_imgmsg(frameNow, 'bgr8'))
-        self.find_mark_pub(frame)
+        self.find_mark_pub()
         self.transform()
-        print()
+        #print()
 
-    def find_mark_pub(self, frame):
+    def find_mark_pub(self):
         if self.range is not None:
+            frame = self.frame
             hsv_range = self.colors[self.color]
             
             hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             hsv_frame[..., 2] = 255
-            #self.image_pub_HSV.publish(bridge.cv2_to_imgmsg(cv2.cvtColor(hsv_frame, cv2.COLOR_HSV2BGR), 'bgr8'))
+            
 
             mask = cv2.inRange(hsv_frame, hsv_range[0], hsv_range[1])
             if self.color == 'red':
                 mask2 = cv2.inRange(hsv_frame, self.red_fix_range[0], self.red_fix_range[1]) #new mask at diffrent diap
                 mask = cv2.addWeighted(mask, 1, mask2, 1, 0.0) #combine 2 img
+            #self.image_pub_HSV.publish(bridge.cv2_to_imgmsg(mask, 'mono8'))
 
             conturs, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) #conturs of all objects
 
             if len(conturs) != 0:
-                cnt = max(conturs, key=cv2.contourArea)
+                try:
+                    cnt = max(conturs, key=cv2.contourArea)
 
-                #centers
-                M = cv2.moments(cnt)
-                xc_mark = int(M['m10'] / M['m00'])
-                yc_mark = int(M['m01'] / M['m00'])
+                    #centers
+                    M = cv2.moments(cnt)
+                    xc_mark = int(M['m10'] / M['m00'])
+                    yc_mark = int(M['m01'] / M['m00'])
 
-                self.img = cv2.circle(frame, (xc_mark, yc_mark), 5, (255, 0, 0), -1)
+                    self.img = cv2.circle(frame, (xc_mark, yc_mark), 5, (255, 0, 0), -1)
 
-                #center of image
-                xc_frame = 160
-                yc_frame = 120
+                    #center of image
+                    xc_frame = 160
+                    yc_frame = 120
 
-                #dist at pix to mark at X and Y axis
-                xDist, yDist = xc_mark - xc_frame, yc_frame - yc_mark
-                #print(f'x: {xDist}\ny: {yDist}')
-                mxDist, myDist = xDist * 0.007 * self.range, yDist * 0.007 * self.range
-                self.mDist = (mxDist, -myDist)
+                    #dist at pix to mark at X and Y axis
+                    xDist, yDist = xc_mark - xc_frame, yc_frame - yc_mark
+                    #print(f'x: {xDist}\ny: {yDist}')
+                    mxDist, myDist = xDist * 0.007 * self.range, yDist * 0.007 * self.range
+                    self.mDist = (mxDist, -myDist)
+
+                    cv2.putText(frame, f'x: {round(self.mDist[0], 5)}', (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2, cv2.LINE_AA)
+                    cv2.putText(frame, f'y: {round(self.mDist[1], 5)}', (20, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 2, cv2.LINE_AA)
+
+                    self.areaInP = cv2.contourArea(cnt) / (320 * 240 / 100)
+                except:
+                    pass
             else:
                 self.mDist = None
+                self.areaInP = None
 
-            #print(f'{self.mDist}')
+            #print(self.areaInP)
             cv2.circle(frame, (160, 120), 3, (0, 255, 255), -1)
-            cv2.putText(frame, f'range {round(self.range, 3)}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, f'range {round(self.range, 3)}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 180, 0), 2, cv2.LINE_AA)
+
             self.image_pub_debug.publish(bridge.cv2_to_imgmsg(frame, 'bgr8'))
 
     def transform(self):
         if self.mDist is not None:
-            self.pose.header.frame_id = 'main_camera_optical'
-            self.pose.pose.position.x = self.mDist[0]
-            self.pose.pose.position.y = self.mDist[1]
-            self.pose.pose.position.z = self.range + 0.0 # + высота пылесоса
-            self.pose.pose.orientation.w = 1
-            self.pose.header.stamp = rospy.get_rostime()
+            try:
+                self.pose.header.frame_id = 'main_camera_optical'
+                self.pose.pose.position.x = self.mDist[0]
+                self.pose.pose.position.y = self.mDist[1]
+                self.pose.pose.position.z = self.range + 0.0 # + высота пылесоса
+                self.pose.pose.orientation.w = 1
+                self.pose.header.stamp = rospy.get_rostime()
 
-            new_pose = self.tf_buffer.transform(self.pose, self.frame_id, self.transform_timeout)
-            self.poseOfArucoInBody = new_pose.pose.position
+                new_pose = self.tf_buffer.transform(self.pose, self.frame_id, self.transform_timeout)
+                self.poseOfArucoInBody = new_pose.pose.position
+            except:
+                pass
         else:
             self.poseOfArucoInBody = None
         #print(self.poseOfArucoInBody)
@@ -178,12 +197,13 @@ class FindDist:
                 set_effect(effect='flash', r=0, g=0, b=255)
             rospy.sleep(1)
 
+for_dist = FindDist()
+print(*for_dist.__dict__.items())
+
 reboot_fcu()
 rospy.sleep(15)
 print('rebooted')
 
-for_dist = FindDist()
-print(*for_dist.__dict__.items())
 thread = threading.Thread(target=for_dist.led)
 thread.start()
 sub1 = rospy.Subscriber('main_camera/image_raw_throttled', Image, for_dist.image_callback, queue_size=1)
@@ -198,7 +218,7 @@ def logicOfFlight(datas):
     prev_errx = 0
     prev_erry = 0
     dt = 0
-    maxDistSnizeniya = 0.03
+    maxDistSnizeniya = for_dist.minD
     minDistNivigate = 0.6
     lastPoseOfAruco = [0, 0]
     VZ = -0.3
@@ -206,6 +226,7 @@ def logicOfFlight(datas):
     while not rospy.is_shutdown():
         start = time.time()
         rangefinder_range = datas.range
+        
         poseAruco = datas.poseOfArucoInBody # here .x and .y (.pose.position of object)
 
         # if find mark:
@@ -215,44 +236,45 @@ def logicOfFlight(datas):
             distX = (poseAruco.x)
             distY = (poseAruco.y)
 
-            refx = 0
-            refy = 0
-            feedbckx = distX
-            feedbcky = distY
-            errx = refx - feedbckx
-            erry = refy - feedbcky
+            if distX != lastPoseOfAruco[0] and distY != lastPoseOfAruco[1]:
 
-            p, i, d = 0.5, 45, 0.1
-            sat = 2
-            Outx, Px, Ix, Dx = PID(err = errx, SatUp =sat, SatDwn=-sat, Kp=p, Ki=i, Kd=d, prev_err=prev_errx, dt = dt)
-            Outy, Py, Iy, Dy = PID(err = erry, SatUp =sat, SatDwn=-sat, Kp=p, Ki=i, Kd=d, prev_err=prev_erry, dt = dt)
+                refx = 0
+                refy = 0
+                feedbckx = distX
+                feedbcky = distY
+                errx = refx - feedbckx
+                erry = refy - feedbcky
 
-            prev_errx = errx
-            prev_erry = erry
+                p, i, d = 0.55, 35, 0.1
+                sat = 2
+                Outx, Px, Ix, Dx = PID(err = errx, SatUp =sat, SatDwn=-sat, Kp=p, Ki=i, Kd=d, prev_err=prev_errx, dt = dt)
+                Outy, Py, Iy, Dy = PID(err = erry, SatUp =sat, SatDwn=-sat, Kp=p, Ki=i, Kd=d, prev_err=prev_erry, dt = dt)
 
-            xVelocity = -Outx
-            yVelocity = -Outy
+                prev_errx = errx
+                prev_erry = erry
+
+                xVelocity = -Outx
+                yVelocity = -Outy
 
 
-            #print(f'{xVelocity}\n{yVelocity}\n')
-            if rangefinder_range > 0.8 or abs(distX) > minDistNivigate or abs(distY) > minDistNivigate:
-                print('NAVIGATE')
-                navigate(frame_id='body', x=distX, y=distY, z=-0.2, yaw=float('nan'), speed=1)
+                #print(f'{xVelocity}\n{yVelocity}\n')
+                if rangefinder_range > 0.8 or abs(distX) > minDistNivigate or abs(distY) > minDistNivigate:
+                    #print('NAVIGATE')
+                    navigate(frame_id='body', x=distX, y=distY, z=-0.2, yaw=float('nan'), speed=1)
 
-            elif abs(distX) < maxDistSnizeniya and abs(distY) < maxDistSnizeniya:
-                print('PID')
-                set_velocity(vx=xVelocity, vy=yVelocity, vz=VZ, frame_id='body')
+                elif abs(distX) < maxDistSnizeniya and abs(distY) < maxDistSnizeniya:
+                    #print('PID')
+                    set_velocity(vx=xVelocity, vy=yVelocity, vz=VZ, frame_id='body')
 
-            else:
-                print('PID')
-                set_velocity(vx=xVelocity, vy=yVelocity, vz=0, frame_id='body')
+                else:
+                    #print('PID')
+                    set_velocity(vx=xVelocity, vy=yVelocity, vz=0, frame_id='body')
 
-            lastPoseOfAruco = [distX, distY, xVelocity, yVelocity]
-            dt = time.time() - start
+                lastPoseOfAruco = [distX, distY, xVelocity, yVelocity]
+                dt = time.time() - start
 
         # if don't find mark
         else:
-            print('nan')
 
             # land
             if rangefinder_range < 0.3 and abs(lastPoseOfAruco[0]) < maxDistSnizeniya and abs(lastPoseOfAruco[1]) < maxDistSnizeniya:
@@ -271,8 +293,16 @@ def logicOfFlight(datas):
                 return 'unsuccess'
                 navigate(x=3.2, y=1.2, z=1.1, yaw=math.pi / 2, frame_id='aruco_map')
 
+        if rangefinder_range < 0.1 and abs(lastPoseOfAruco[0]) < maxDistSnizeniya and abs(lastPoseOfAruco[1]) < maxDistSnizeniya:
+            print(f'range: {rangefinder_range}')
+            set_velocity(vx=lastPoseOfAruco[2], vy=lastPoseOfAruco[3], vz=-10, frame_id='body')
+            while rospy.wait_for_message('rangefinder/range', Range).range > 0.1:
+                pass
+            arming(False)
+            return 'success'
+
 def findInZone():
-    pointsForFligtToFind = [123]
+    pointsForFligtToFind = [85, 129, 131, 87, 94]
     while not rospy.is_shutdown():
         for point in pointsForFligtToFind:
             navigate(x=0, y=0, z=1.1, yaw=math.pi / 2, frame_id=f'aruco_{point}')
@@ -281,8 +311,12 @@ def findInZone():
                 if for_dist.poseOfArucoInBody is not None:
                     res = logicOfFlight(for_dist)
                     if res == 'success':
+                        for_dist.STOP = True
+                        rospy.sleep(2)
+                        thread.join()
                         # landed, red indicate
                         set_effect(r=255, g=0, b=0)
+                        rospy.sleep(2)
                         return
                     else:
                         navigate(x=0, y=0, z=1.1, yaw=math.pi / 2, frame_id=f'aruco_{point}')
@@ -295,8 +329,6 @@ findInZone()
 print(f'range: {for_dist.range}')
 
 rospy.sleep(1)
-for_dist.STOP = True
-thread.join()
 sub1.unregister()
 sub3.unregister()
 rospy.sleep(1)

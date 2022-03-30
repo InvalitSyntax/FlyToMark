@@ -258,6 +258,9 @@ def findInZone():
                 if for_dist.poseOfArucoInBody is not None:
                     res = logicOfFlight(for_dist)
                     if res == 'success':
+                        for_dist.STOP = True
+                        thread.join()
+                        rospy.sleep(2)
                         # landed, red indicate
                         set_effect(r=255, g=0, b=0)
                         return
@@ -272,8 +275,6 @@ findInZone()
 print(f'range: {for_dist.range}')
 
 rospy.sleep(1)
-for_dist.STOP = True
-thread.join()
 sub1.unregister()
 sub2.unregister()
 sub3.unregister()
